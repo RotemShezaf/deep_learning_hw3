@@ -26,8 +26,6 @@ def sliding_window_attention(q, k, v, window_size, padding_mask=None):
                                    device=q.device, dtype=q.dtype)
     
     # Compute attention scores only within sliding window
-
-    torch.einsum("bij)
     for i in range(seq_len):
         start = max(0, i - half_window)
         end = min(seq_len, i + half_window)
