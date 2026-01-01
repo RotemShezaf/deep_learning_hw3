@@ -19,8 +19,22 @@ class EncoderCNN(nn.Module):
         #  use pooling or only strides, use any activation functions,
         #  use BN or Dropout, etc.
         # ====== YOUR CODE: ======
-        pass
+        chanels = [in_channels,   128,  256 , 512,  out_channels]
+        kernel_size = (5,5)
+        stride = (2,2)
+        last_size = (1,1)
+        last_padding = (1,1)
+        padding = (2,2)
+
+        activation = nn.ReLU()
+        modules = nn.ModuleList()
+        for i in range(len(chanels)-2):
+            modules.add(nn.Conv2d(chanels[i], chanels[i+1], kernel_size=kernel_size, stride=stride, padding=padding))
+            modules.add(activation)
+            modules.add(nn.BatchNorm2d(chanels[i+1]))
+
         # ========================
+        modules.add(nn.Conv2d(chanels[-2], chanels[-1], kernel_size=last_size, padding=last_padding))
         self.cnn = nn.Sequential(*modules)
 
     def forward(self, x):
@@ -42,7 +56,26 @@ class DecoderCNN(nn.Module):
         #  output should be a batch of images, with same dimensions as the
         #  inputs to the Encoder were.
         # ====== YOUR CODE: ======
-        pass
+        chanels = [  out_channels, 512, 256, 128, in_channels]
+        kernel_size = (5,5)
+        stride = (2,2)
+        padding = (2,2)
+        first_padding = (1,1)
+        first_stride = (1,1)
+        output_padding = (1,1)
+
+        activation = nn.ReLU()
+        modules = nn.ModuleList()
+        modules.add (nn.ConvTranspose2d(chanels[0], chanels[1], kernel_size=kernel_size, padding=first_padding, stride=first_stride))
+        for i in range(1, len(chanels)-1):
+            modules.add(activation)
+            modules.add(nn.BatchNorm2d(chanels[i]))
+            modules.add(nn.ConvTranspose2d(chanels[i], chanels[i+1], kernel_size=kernel_size, stride=stride, padding=padding, output_padding=output_padding))
+
+    
+
+        
+        
         # ========================
         self.cnn = nn.Sequential(*modules)
 

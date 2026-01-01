@@ -56,39 +56,39 @@ def sliding_window_attention(q, k, v, window_size, padding_mask=None):
         device=q.device,
         dtype=q.dtype,
     ).to(q.device)
-
+    
     #fill the currect indexes in attention_logits
     attention_logits[...,q_idx, k_idx] = attention_logits_local
-    attention_logits = attention_logits
+    attention_logits = attention_logits/ math.sqrt(d_k)
 
-        
-    '''
     if padding_mask is not None:
-        padding_mask = padding_mask.bool()
-        q = q.masked_fill(padding_mask.unsqueeze(1).unsqueeze(3).expand_as(q), 0)
-        k = k.masked_fill(padding_mask.unsqueeze(1).unsqueeze(3).expand_as(k), 0)
-        v = v.masked_fill(padding_mask.unsqueeze(1).unsqueeze(3).expand_as(v), 0)
-    '''
-    if padding_mask is not None:
-        # Mask out attention TO padding positions (columns in attention matrix)
-        if len(q.shape) > 3:
+        # Mask attention TO padding positions (columns) and FROM padding positions (rows)
+        if len(attention_logits.shape) == 4:
             # Multi-head: [Batch, Heads, SeqLen, SeqLen]
-            # Need: [Batch, 1, 1, SeqLen] to broadcast across heads and queries
-            expended_padding = padding_mask.unsqueeze(1).unsqueeze(2)  # Insert at dim 1 twice
+            # Mask TO padding (columns): [Batch, 1, 1, SeqLen]
+            mask_to = padding_mask.unsqueeze(1).unsqueeze(2).expand(batch_size, q.shape[1] , seq_len,seq_len)
+            print(mask_to)
+            # Mask FROM padding (rows): [Batch, 1, SeqLen, 1]
+            mask_from = padding_mask.unsqueeze(1).unsqueeze(3)
         else:
             # Single-head: [Batch, SeqLen, SeqLen]
-            # Need: [Batch, 1, SeqLen] to broadcast across queries
-            expended_padding = padding_mask.unsqueeze(1)
+            # Mask TO padding (columns): [Batch, 1, SeqLen]
+            mask_to = padding_mask.unsqueeze(1)
+            # Mask FROM padding (rows): [Batch, SeqLen, 1]
+            mask_from = padding_mask.unsqueeze(2)
         
-        attention_logits = attention_logits.masked_fill(expended_padding == 0, -9e15)/ math.sqrt(d_k)
-        
-    #'''
+        # Apply both masks
+        attention_logits = attention_logits.masked_fill(mask_to == 0, -9e15)
+        #attention_logits = attention_logits.masked_fill(mask_from == 0, -9e15)
     
+    # Apply both masks
+    #attention_logits = attention_logits.masked_fill(mask_to == 0, -9e15)
+    #attention_logits = attention_logits.masked_fill(mask_from == 0, -9e15)
+    #'''
+    attention_logits = attention_logits
     attention =   nn.functional.softmax(attention_logits, dim=-1)
-
     
     #mask for attention, v multipication
-    print("g")
     '''
     v_local = v[...,k_idx,:]
     attention_local = attention[...,q_idx, k_idx]
@@ -290,8 +290,14 @@ class Encoder(nn.Module):
         '''
         output = None
 
+     
         # ====== YOUR CODE: ======
-        pass
+        x = self.encoder_embedding(sentence)  # [Batch, SeqLen, Dims]
+        x = self.positional_encoding(x)      # add positional encoding
+        for layer in self.encoder_layers:
+            x = layer(x, self.encoder_layers)
+        output = x
+            
         # ========================
         
         
