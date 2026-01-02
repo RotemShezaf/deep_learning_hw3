@@ -295,7 +295,7 @@ class Encoder(nn.Module):
         x = self.encoder_embedding(sentence)  # [Batch, SeqLen, Dims]
         x = self.positional_encoding(x)      # add positional encoding
         for layer in self.encoder_layers:
-            x = layer(x, self.encoder_layers)
+            x = layer(x, self.padding_mask)  # pass through each encoder layer
         output = x
             
         # ========================

@@ -94,7 +94,30 @@ class Trainer(abc.ABC):
             #  - Implement early stopping. This is a very useful and
             #    simple regularization technique that is highly recommended.
             # ====== YOUR CODE: ======
-            pass
+            train_result = self.train_epoch(dl_train, verbose=verbose, **kw)
+            epoch_len = len(train_result.losses)
+
+            train_loss.append(sum(train_result.losses)/epoch_len)
+            train_acc.append(train_result.accuracy)
+
+            test_result = self.test_epoch(dl_test, verbose=verbose, **kw)
+
+            test_loss.append(sum(test_result.losses)/epoch_len)
+            test_acc.append(test_result.accuracy)
+
+            actual_num_epochs += 1
+            if best_acc is None or test_result.accuracy > best_acc:
+                # ====== YOUR CODE: ======
+                best_acc = test_result.accuracy
+                save_checkpoint = True
+                epochs_without_improvement = 0
+            else :
+                epochs_without_improvement = epochs_without_improvement+1
+            if  early_stopping is not None and \
+                epochs_without_improvement >    early_stopping:
+                    print("ops")
+                    break;
+                
             # ========================
 
             # Save model checkpoint if requested
@@ -279,7 +302,13 @@ class VAETrainer(Trainer):
         x = x.to(self.device)  # Image batch (N,C,H,W)
         # TODO: Train a VAE on one batch.
         # ====== YOUR CODE: ======
-        pass
+        z, z_mu, z_log_sigma2 = self.model.module.encode(x)
+        xr = self.model.module.decode(z)
+        self.optimizer.zero_grad()
+        loss, data_loss, kldiv_loss = self.loss_fn(x, xr, z_mu, z_log_sigma2)
+        loss.backward()
+        self.optimizer.step()
+        
         # ========================
 
         return BatchResult(loss.item(), 1 / data_loss.item())
@@ -291,7 +320,11 @@ class VAETrainer(Trainer):
         with torch.no_grad():
             # TODO: Evaluate a VAE on one batch.
             # ====== YOUR CODE: ======
-            pass
+            z, z_mu, z_log_sigma2 = self.model.module.encode(x)
+            xr = self.model.module.decode(z)
+            num_correct = None
+            self.optimizer.zero_grad()
+            loss, data_loss, kldiv_loss = self.loss_fn(x, xr, z_mu, z_log_sigma2)
             # ========================
 
         return BatchResult(loss.item(), 1 / data_loss.item())
