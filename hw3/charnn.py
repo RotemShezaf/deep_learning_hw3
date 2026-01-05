@@ -23,7 +23,10 @@ def char_maps(text: str):
     #  It's best if you also sort the chars before assigning indices, so that
     #  they're in lexical order.
     # ====== YOUR CODE: ======
-    pass
+    unique_chars = sorted(list(set(text)))
+    
+    char_to_idx = {char: i for i, char in enumerate(unique_chars)}
+    idx_to_char = {i: char for i, char in enumerate(unique_chars)}
     # ========================
     return char_to_idx, idx_to_char
 
@@ -39,7 +42,10 @@ def remove_chars(text: str, chars_to_remove):
     """
     # TODO: Implement according to the docstring.
     # ====== YOUR CODE: ======
-    pass
+    chars_set = set(chars_to_remove)
+    clean_list = [char for char in text if char not in chars_set]
+    text_clean = "".join(clean_list)
+    n_removed = len(text) - len(text_clean)
     # ========================
     return text_clean, n_removed
 
@@ -59,7 +65,13 @@ def chars_to_onehot(text: str, char_to_idx: dict) -> Tensor:
     """
     # TODO: Implement the embedding.
     # ====== YOUR CODE: ======
-    pass
+    indices = [char_to_idx[c] for c in text]
+    indices_tensor = torch.tensor(indices, dtype=torch.long)
+    
+    num_classes = len(char_to_idx)
+    result = torch.nn.functional.one_hot(indices_tensor, num_classes=num_classes)
+    
+    result = result.to(torch.int8)
     # ========================
     return result
 
@@ -76,7 +88,9 @@ def onehot_to_chars(embedded_text: Tensor, idx_to_char: dict) -> str:
     """
     # TODO: Implement the reverse-embedding.
     # ====== YOUR CODE: ======
-    pass
+    indices = torch.argmax(embedded_text, dim=1)
+    char_list = [idx_to_char[idx.item()] for idx in indices]
+    result = "".join(char_list)
     # ========================
     return result
 
@@ -105,7 +119,16 @@ def chars_to_labelled_samples(text: str, char_to_idx: dict, seq_len: int, device
     #  3. Create the labels tensor in a similar way and convert to indices.
     #  Note that no explicit loops are required to implement this function.
     # ====== YOUR CODE: ======
-    pass
+    embedded_text = chars_to_onehot(text, char_to_idx).to(device)
+    
+ 
+    indices = torch.tensor([char_to_idx[c] for c in text], device=device)
+    
+    num_samples = (len(text) - 1) // seq_len
+    total_needed = num_samples * seq_len
+    
+    samples = embedded_text[:total_needed].view(num_samples, seq_len, -1) # (N, S, V)
+    labels = indices[1 : total_needed + 1].view(num_samples, seq_len)
     # ========================
     return samples, labels
 
@@ -189,7 +212,18 @@ class SequenceBatchSampler(torch.utils.data.Sampler):
         #  you can drop it.
         idx = None  # idx should be a 1-d list of indices.
         # ====== YOUR CODE: ======
-        pass
+        n_samples = len(self.dataset)
+        num_batches = n_samples // self.batch_size
+        
+        total_valid_indices = num_batches * self.batch_size
+        
+        indices = list(range(total_valid_indices))
+        
+        idx = []
+        for batch_idx in range(num_batches):
+            for i in range(self.batch_size):
+                # Jump by num_batches to find the start of the next sequence segment
+                idx.append(indices[batch_idx + i * num_batches])
         # ========================
         return iter(idx)
 
