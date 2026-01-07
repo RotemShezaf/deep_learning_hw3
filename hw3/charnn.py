@@ -144,7 +144,10 @@ def hot_softmax(y, dim=0, temperature=1.0):
     """
     # TODO: Implement based on the above.
     # ====== YOUR CODE: ======
-    pass
+    y_scaled = y / temperature
+    exp_y = torch.exp(y_scaled)
+    sum_exp_y = torch.sum(exp_y, dim=dim, keepdim=True)
+    return exp_y / sum_exp_y
     # ========================
 
 
@@ -179,7 +182,26 @@ def generate_from_model(model, start_sequence, n_chars, char_maps, T):
     #  necessary for this. Best to disable tracking for speed.
     #  See torch.no_grad().
     # ====== YOUR CODE: ======
-    pass
+    with torch.no_grad():
+        h = None
+       
+        curr_indices = torch.tensor([char_to_idx[c] for c in start_sequence], device=device).unsqueeze(0)
+
+        x = torch.nn.functional.one_hot(curr_indices, num_classes = len(char_to_idx)).to(dtype = torch.float)
+        
+        y, h = model(x, h)
+
+        for _ in range(n_chars - len(start_sequence)):
+            last_char_logits = y[0, -1, :]
+            probs = hot_softmax(last_char_logits, dim=0, temperature=T)
+            
+            sampled_idx = torch.multinomial(probs, num_samples=1).item()
+            out_text += idx_to_char[sampled_idx]
+            
+            next_input_idx = torch.tensor([[sampled_idx]], device=device)
+            x_next = torch.nn.functional.one_hot(next_input_idx, num_classes = len(char_to_idx)).to(dtype = torch.float)
+            
+            y, h = model(x_next, h)
     # ========================
 
     return out_text
@@ -255,7 +277,26 @@ class MultilayerGRU(nn.Module):
         self.layer_params = []
 
         # ====== YOUR CODE: ======
-        pass
+        self.layer_params = nn.ModuleList()
+        for i in range(n_layers):
+            curr_in_dim = in_dim if i == 0 else h_dim
+            
+            w_xz = nn.Linear(curr_in_dim, h_dim, bias=True)
+            w_hz = nn.Linear(h_dim, h_dim, bias=False)
+            
+            w_xr = nn.Linear(curr_in_dim, h_dim, bias=True)
+            w_hr = nn.Linear(h_dim, h_dim, bias=False)
+            
+            w_xg = nn.Linear(curr_in_dim, h_dim, bias=True)
+            w_hg = nn.Linear(h_dim, h_dim, bias=False)
+            
+            drop = nn.Dropout(dropout)
+            self.layer_params.append(nn.ModuleList([
+                w_xz, w_hz, w_xr, w_hr, w_xg, w_hg, drop
+            ]))
+            
+        # Final output projection (Why and By) -> 2 parameters
+        self.predict_layer = nn.Linear(h_dim, out_dim, bias=True)
         # ========================
 
     def forward(self, input: Tensor, hidden_state: Tensor = None):
@@ -311,7 +352,7 @@ class MultilayerGRU(nn.Module):
                 if layer_index > 0:
                     current_input = dropout_layer(new_state)
 
-            output_seq[:, time_step] = self.layer_params[-1][0](layer_states[-1])
+            output_seq[:, time_step] = self.predict_layer(layer_states[-1])
 
         final_hidden_state = torch.stack(layer_states, dim=1)
         hidden_state = final_hidden_state
