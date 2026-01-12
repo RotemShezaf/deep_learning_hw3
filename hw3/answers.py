@@ -38,11 +38,17 @@ def part1_generation_params():
 
 
 part1_q1 = r"""
-**Your answer:**
+We split the text because training on the entire text at once would do to things:
+1) Exceed your GPU's memory capacity
+2) cause vanishing gradients, making it impossible for the model to learn.
+Using shorter sequences allows for Batching, which processes multiple text segments in parallel for speed,
+and Truncated Backpropagation Through Time, which keeps the math stable and computationally manageable.
 """
 
 part1_q2 = r"""
-**Your answer:**
+This is possible because the hidden state is passed from one batch to the next.
+In a RNN the final hidden state of one sequence serves as the initial state for the next in the batch,
+which allows the model to "carry" earlier context across sequence boundaries, even though the gradients are only calculated for the current.
 """
 
 part1_q3 = r"""
