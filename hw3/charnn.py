@@ -5,6 +5,8 @@ import torch.utils.data
 from torch import Tensor
 from typing import Iterator
 
+device = torch.device('cuda' if torch.cuda.is_available() else 'mps' if torch.backends.mps.is_available() else 'cpu')
+
 # Yuval
 def char_maps(text: str):
     """
@@ -119,16 +121,17 @@ def chars_to_labelled_samples(text: str, char_to_idx: dict, seq_len: int, device
     #  3. Create the labels tensor in a similar way and convert to indices.
     #  Note that no explicit loops are required to implement this function.
     # ====== YOUR CODE: ======
-    embedded_text = chars_to_onehot(text, char_to_idx).to(device)
+    embedded = chars_to_onehot(text, char_to_idx).to(device)
     
- 
+
     indices = torch.tensor([char_to_idx[c] for c in text], device=device)
     
     num_samples = (len(text) - 1) // seq_len
-    total_needed = num_samples * seq_len
+    total_len = num_samples * seq_len
     
-    samples = embedded_text[:total_needed].view(num_samples, seq_len, -1) # (N, S, V)
-    labels = indices[1 : total_needed + 1].view(num_samples, seq_len)
+    samples = embedded[:total_len].view(num_samples, seq_len, -1)
+    
+    labels = indices[1 : total_len + 1].view(num_samples, seq_len)
     # ========================
     return samples, labels
 
@@ -184,22 +187,25 @@ def generate_from_model(model, start_sequence, n_chars, char_maps, T):
     # ====== YOUR CODE: ======
     with torch.no_grad():
         h = None
-       
+        char_to_idx, idx_to_char = char_maps
+        
         curr_indices = torch.tensor([char_to_idx[c] for c in start_sequence], device=device).unsqueeze(0)
-
-        x = torch.nn.functional.one_hot(curr_indices, num_classes = len(char_to_idx)).to(dtype = torch.float)
+        x = torch.nn.functional.one_hot(curr_indices, num_classes=len(char_to_idx)).to(dtype=torch.float)
         
         y, h = model(x, h)
+        
+        out_text = start_sequence
 
         for _ in range(n_chars - len(start_sequence)):
             last_char_logits = y[0, -1, :]
             probs = hot_softmax(last_char_logits, dim=0, temperature=T)
             
             sampled_idx = torch.multinomial(probs, num_samples=1).item()
-            out_text += idx_to_char[sampled_idx]
+            new_char = idx_to_char[sampled_idx]
+            out_text += new_char
             
             next_input_idx = torch.tensor([[sampled_idx]], device=device)
-            x_next = torch.nn.functional.one_hot(next_input_idx, num_classes = len(char_to_idx)).to(dtype = torch.float)
+            x_next = torch.nn.functional.one_hot(next_input_idx, num_classes=len(char_to_idx)).to(dtype=torch.float)
             
             y, h = model(x_next, h)
     # ========================
@@ -237,20 +243,15 @@ class SequenceBatchSampler(torch.utils.data.Sampler):
         n_samples = len(self.dataset)
         num_batches = n_samples // self.batch_size
         
-        total_valid_indices = num_batches * self.batch_size
-        
-        indices = list(range(total_valid_indices))
-        
         idx = []
-        for batch_idx in range(num_batches):
+        for b in range(num_batches):
             for i in range(self.batch_size):
-                # Jump by num_batches to find the start of the next sequence segment
-                idx.append(indices[batch_idx + i * num_batches])
+                idx.append(i * num_batches + b)
         # ========================
         return iter(idx)
 
     def __len__(self):
-        return len(self.dataset)
+        return (len(self.dataset) // self.batch_size) * self.batch_size #return len(self.dataset)
 
 
 class MultilayerGRU(nn.Module):
@@ -295,7 +296,6 @@ class MultilayerGRU(nn.Module):
                 w_xz, w_hz, w_xr, w_hr, w_xg, w_hg, drop
             ]))
             
-        # Final output projection (Why and By) -> 2 parameters
         self.predict_layer = nn.Linear(h_dim, out_dim, bias=True)
         # ========================
 
@@ -331,7 +331,7 @@ class MultilayerGRU(nn.Module):
         # Loop over layers of the model
 
         activation_sigmoid, activation_tanh = nn.Sigmoid(), nn.Tanh()
-        output_seq = torch.zeros_like(input)
+        output_seq = torch.empty(batch_size, seq_len, self.out_dim, device=input.device)
 
         for time_step in range(seq_len):
             current_input = layer_input[:, time_step]
