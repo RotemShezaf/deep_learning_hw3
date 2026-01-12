@@ -28,8 +28,8 @@ def part1_rnn_hyperparams():
 
 
 def part1_generation_params():
-    start_seq = ""
-    temperature = 0.0001
+    start_seq = "HAMLET:\nTo be, or not to be"
+    temperature = 0.75
     # TODO: Tweak the parameters to generate a literary masterpiece.
     # ====== YOUR CODE: ======
     pass
