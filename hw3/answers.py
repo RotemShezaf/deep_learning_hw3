@@ -52,11 +52,23 @@ which allows the model to "carry" earlier context across sequence boundaries, ev
 """
 
 part1_q3 = r"""
-**Your answer:**
+We don't shuffle the batches because the model relies on their continuity to maintain long-term memory.
+Since we pass the final hidden state of one batch as the initial state for the next, the sequences in the same "slot"
+for adjacent batches should be consecutive segments of the original text. Shuffling would break this link, providing the model with semi-unrelated parts of the text,
+which would confuse the learning process and destroy its ability to understand context.
 """
 
 part1_q4 = r"""
-**Your answer:**
+1. At the default 1.0, the model might assign enough probability to unlikely characters that it occasionally picks one, 
+eading to typos or nonsensical words. Lowering it concentrates the probability on the most likely next characters,
+making the output feel more grammatically grounded and "sane."
+
+2. The output becomes random gibberish. As T->inf, the probability distribution gets flattened, i.e., every character becomes
+equally/similarely likely to be picked regardless of what the model actually learned. The model loses its ability to follow structure,
+resulting in a chaotic string of characters and symbols.
+
+3. The output becomes repetitive as T->0 because it becomes too confident, consistently picking only the single most probable character (argmax).
+While this is very safe, it often traps the model in infinite loops—such as repeating "THE THE THE"—because it lacks the randomness needed to move onto new words.
 """
 # ==============
 
