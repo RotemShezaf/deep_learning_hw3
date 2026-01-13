@@ -66,7 +66,6 @@ class Trainer(abc.ABC):
 
         best_acc = None
         epochs_without_improvement = 0
-
         checkpoint_filename = None
         if checkpoints is not None:
             checkpoint_filename = f"{checkpoints}.pt"
@@ -79,7 +78,7 @@ class Trainer(abc.ABC):
                     "ewi", epochs_without_improvement
                 )
                 self.model.load_state_dict(saved_state["model_state"])
-
+        
         for epoch in range(num_epochs):
             save_checkpoint = False
             verbose = False  # pass this to train/test_epoch.
@@ -95,7 +94,9 @@ class Trainer(abc.ABC):
             #    simple regularization technique that is highly recommended.
             # ====== YOUR CODE: ======
             train_result = self.train_epoch(dl_train, verbose=verbose, **kw)
-            train_loss.append(sum(train_result.losses) / len(train_result.losses))
+            epoch_len = len(train_result.losses)
+            assert(train_result.losses is not None)
+            train_loss.append(sum(train_result.losses)/epoch_len)
             train_acc.append(train_result.accuracy)
     
             test_result = self.test_epoch(dl_test, verbose=verbose, **kw)
@@ -200,7 +201,6 @@ class Trainer(abc.ABC):
         num_correct = 0
         num_samples = len(dl.sampler)
         num_batches = len(dl.batch_sampler)
-
         if max_batches is not None:
             if max_batches < num_batches:
                 num_batches = max_batches
@@ -322,6 +322,7 @@ class RNNTrainer(Trainer):
 class VAETrainer(Trainer):
     def train_batch(self, batch) -> BatchResult:
         x, _ = batch
+        assert( batch is not None and batch and not batch[0].isnan().any())
         x = x.to(self.device)  # Image batch (N,C,H,W)
         # TODO: Train a VAE on one batch.
         # ====== YOUR CODE: ======
@@ -329,6 +330,7 @@ class VAETrainer(Trainer):
         xr = self.model.module.decode(z)
         self.optimizer.zero_grad()
         loss, data_loss, kldiv_loss = self.loss_fn(x, xr, z_mu, z_log_sigma2)
+        assert(loss is not None and not torch.isnan(loss))
         loss.backward()
         self.optimizer.step()
         
@@ -346,7 +348,6 @@ class VAETrainer(Trainer):
             z, z_mu, z_log_sigma2 = self.model.module.encode(x)
             xr = self.model.module.decode(z)
             num_correct = None
-            self.optimizer.zero_grad()
             loss, data_loss, kldiv_loss = self.loss_fn(x, xr, z_mu, z_log_sigma2)
             # ========================
 
@@ -392,7 +393,12 @@ class TransformerEncoderTrainer(Trainer):
             # TODO:
             #  fill out the testing loop.
             # ====== YOUR CODE: ======
-            pass
+            with torch.no_grad():
+                 pred = self.model(input_ids, attention_mask).to(self.device)
+                 loss = self.loss_fn(pred.squeeze(-1), label)
+                 # compute number of correct predictions
+                 y_t = torch.round(torch.sigmoid(pred)).float()
+                 num_correct = (y_t.squeeze(-1) == label).sum()
             # ========================
 
 
