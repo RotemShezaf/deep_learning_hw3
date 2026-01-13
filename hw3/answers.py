@@ -184,24 +184,25 @@ def part3_transformer_encoder_hyperparams():
 
 
 part3_q1 = r"""
-The aliding windows attention will recive xtention for  contex  
-with regard to a window at size size 2 * window_size + 1. 
+The a=sliding windows attention will recive attention for  contex  
+with regard to a window at size size 2 * window_size + 1 tokens. 
 when we stack encoder layes
-on top of the other, the now encoder layer attention will regard for
+on top of the other, the each encoder layer attention will regard for
 a window of size size 2 * window_size + 1 on the prev network output,
-wich itself containes context of size 2 * window_size + 1. therfore,
+wich itself containes context of size 2 * window_size + 1 for the layer before it.
+Therfore,
 the layer number i can recive information
-at from contex at size O((2 * window_size + 1) ** num_layers). 
+at from contex at size O((2 * window_size + 1) ** num_layers) overall. 
 """
 
 part3_q2 = r"""
-My idea is in sdition to the sliding window adition,
-to create compressd attention that wl regard the whoule image.
-I will compress the keys and values using a lernable layer.
+My idea is in adition to the sliding window adition,
+we will create compressd attention in regard to the whole image.
+To create the compresset attention, I will compress the keys and values using a lernable layer.
 the layer will be a  MLP that from each window of size k and stride s will
 generate single token representation. 
 we will choose K and s such that the new sequense will be of length w.
-than, i will recive that the compresst K matrix K' dims are [Batch, *, w, Dims]
+Than, WE will recive that the compresst K matrix, denote K', dims are [Batch, *, w, Dims]
 and the compresst values matrix V' dims are [Batch, *, w, Dims].
 therfor, calculating Q @ K'.T will be O(B * w * Dims *n) instead of
 O(B * n * Dims * n). 
@@ -210,11 +211,11 @@ torch.sofmax(Q @ K'.T / sqrt(Dims), dim=-1) @ V' will be O(B * n * w * Dims)
 wich is as requested. the multy layer perseptron will containe a matrix that
 maps window of size k = n // w into single token, therfore
 the multy layer perseptron will have O(k ) parameters, 
-and wont harm the complexity.
+and won't harm the complexity.
 because K'[..,i,:] containse information from
-all the infurt, but compressed, aur atention will still contain global information
+all the output, but compressed, our attention will still contain global information
 but compressed. we will still have the local attention from 
-the sliding window attention to have the local attention 
+the sliding window attention for having the local attention 
 represented in uncompressed maner.
 """
 
