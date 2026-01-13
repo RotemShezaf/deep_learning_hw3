@@ -120,13 +120,18 @@ def part2_vae_hyperparams():
 
 
 part2_q1 = r"""
-sigma_2 is the assumed variance to decode specific x prom latent space value z, means:  $p _{\bb{\beta}}(\bb{X} | \bb{Z}=\bb{z}) = \mathcal{N}( \Psi _{\bb{\beta}}(\bb{z}) , \sigma^2 \bb{I} )$, when $\Psi _{\bb{\beta}}(\bb{z})$ is the decoder output on z. As much as sigma_2 is smaller, a more deterministic decoder assumed. practically, as we decrease sigma_2 we give more weigth to the data recunstruction loss over the KL-diverganze loss. the KL-diverganze loss eforces de decoder
-output to distributed as similar as possible to $mathcal{N}(\bb{0},\bb{I})$ (KLdeverganze term), indipendent of x.
-practucaly, increasing sigma make us learn more shape, detailed and acurate images in price of making it harder to generate inages diffrent from the data.
-It make it harder to generate new images by sampling uniformly from the latent space, vecause we would have errors
-with latent space values that arent directly decoded from original data.
-In other words, it makes it harder to learn meaningfull latent space represantation ( in sigma2 = infinity 
+sigma_2 is the assumed variance to decode specific x prom latent space value z, means:  $p _{\bb{\beta}}(\bb{X} | \bb{Z}=\bb{z}) = \mathcal{N}( \Psi _{\bb{\beta}}(\bb{z}) , \sigma^2 \bb{I} )$, when $\Psi _{\bb{\beta}}(\bb{z})$ is the decoder output on z.
+As much as sigma_2 is smaller, a more deterministic decoder assumed. practically, as we decrease sigma_2 we give more weigth to the data recunstruction loss over the KL-diverganze loss. the KL-diverganze loss eforces de decoder
+output to distributed more simmilar to $mathcal{N}(\bb{0},\bb{I})$ , a distribution indipendent of x.
+practucaly, decresing sigma will make us to create more  detailed,
+but make it harder learning to create resunable inages that diffrent from the data
+by sampling uniformly from the latent space.
+That because we havent any constraints about the
+latent space distribution, therdfore we dont know what we learned to decode from latent space values that aren't directly decoded from the data.
+Regularize the latent space distribution to normal distribution alsu enshure we learned meaningful fetures.
+In other words, decreasing sigma will make  it harder to learn meaningfull latent space represantation ( in sigma2 = infinity 
 we would create only data compression).
+
 
 for example, increasing sigma fixes error i had somtimes
 of yelow noisy pixels inside the face, is price of creating more blurred images.
@@ -134,21 +139,29 @@ of yelow noisy pixels inside the face, is price of creating more blurred images.
 
 part2_q2 = r"""
 1. The purpose of the data recunstruction error is maximize the liklihode to recunstruct x, from z sampled from x decoded value.
+
 The porpose of the KL-diverganze loss is to minimize the diffrance between the the distribution of the decoder value given x,
 to a constant probabilty independendent of x. 
-2. the latent-space distribution affected by the KL loss term by having distributed mor simmilar to a prior distribution p(z) 
-independent of x. by regularizing the latent space for the desired distribution, for example normal distribution, we can ensure it capture meaningfull information. the loss enable us control over the distribution shape,and smothness. 
-3. the benefit is that Sampling uniformly from the latent space and decode will anable use to create meaningfull new images, that differes from the input data. that because regularizating the latet space distrubution to a normal distribution will make shure we learned neaningful fetures,
+2. the latent-space distribution affected by the KL loss term by having distributed more simmilar to a prior distribution p(z) 
+independent of x. by regularizing the latent space for the desired distribution, for example normal distribution, we can ensure it capture meaningfull information. That because the loss enable us control over the distribution shape,and smothness. 
+else, the regularization of the latent space distribution will anable use to learn information about latent space values that aren't decoded from our imaged directly
+or close in the original space for our data.
+3. the benefit is that Sampling uniformly from the latent space and decode will anable use to create meaningfull new images, that differes from the input data. that because regularizating the latet space distrubution to a normal distribution will make shur we learned neaningful fetures,
 and that the latent space values will cary resunable informantion even when not decoded directly from on of the data images.
 """
 
 part2_q3 = r"""
-because out goal is to maximize the loklihoode to recive the data.
+Because out goal is to maximize the loklihoode to recive our data.
 """
 
 part2_q4 = r"""
-to enforce sigma to be pozitive witht vanishing of exploding gradients.
-because we use  log of the latent-space variance in the loss computation, it helps with avoiding vanishing or exploding gradients.
+to enforce sigma to be pozitive witht vanishing or exploding gradients.
+if we would enforece sigma to be pozitive by using relu or softplus on the network output,
+we would have vanishing gradients when the output is near zero.
+other benefit of this scheme 
+for evoiding exploding or vanishing gradients is that
+ we use the log of the latent-space variance in the loss computation.
+
 """
 
 
