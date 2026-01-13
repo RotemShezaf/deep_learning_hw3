@@ -184,8 +184,8 @@ def part3_transformer_encoder_hyperparams():
 
 
 part3_q1 = r"""
-The a=sliding windows attention will recive attention for  contex  
-with regard to a window at size size 2 * window_size + 1 tokens. 
+The sliding windows attention will recive attention for  contex  
+regarding to a window at size size 2 * window_size + 1 tokens. 
 when we stack encoder layes
 on top of the other, the each encoder layer attention will regard for
 a window of size size 2 * window_size + 1 on the prev network output,
