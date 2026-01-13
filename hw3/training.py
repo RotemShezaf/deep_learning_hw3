@@ -98,10 +98,9 @@ class Trainer(abc.ABC):
             assert(train_result.losses is not None)
             train_loss.append(sum(train_result.losses)/epoch_len)
             train_acc.append(train_result.accuracy)
-
+    
             test_result = self.test_epoch(dl_test, verbose=verbose, **kw)
-
-            test_loss.append(sum(test_result.losses)/epoch_len)
+            test_loss.append(sum(test_result.losses) / len(test_result.losses))
             test_acc.append(test_result.accuracy)
 
             actual_num_epochs += 1
@@ -243,14 +242,14 @@ class RNNTrainer(Trainer):
     def train_epoch(self, dl_train: DataLoader, **kw):
         # TODO: Implement modifications to the base method, if needed.
         # ====== YOUR CODE: ======
-        pass
+        self.hidden_state = None
         # ========================
         return super().train_epoch(dl_train, **kw)
 
     def test_epoch(self, dl_test: DataLoader, **kw):
         # TODO: Implement modifications to the base method, if needed.
         # ====== YOUR CODE: ======
-        pass
+        #self.hidden_state = None
         # ========================
         return super().test_epoch(dl_test, **kw)
 
@@ -268,7 +267,20 @@ class RNNTrainer(Trainer):
         #  - Update params
         #  - Calculate number of correct char predictions
         # ====== YOUR CODE: ======
-        pass
+        self.optimizer.zero_grad()
+        
+        logits, self.hidden_state = self.model(x, self.hidden_state)
+        self.hidden_state = self.hidden_state.detach()
+        
+        logits_flat = logits.view(-1, logits.size(-1))
+        y_flat = y.view(-1)
+        
+        loss = self.loss_fn(logits_flat, y_flat)
+        loss.backward()
+        self.optimizer.step()
+        
+        _, predicted = torch.max(logits, dim=2)
+        num_correct = torch.sum(predicted == y)
         # ========================
 
         # Note: scaling num_correct by seq_len because each sample has seq_len
@@ -288,7 +300,20 @@ class RNNTrainer(Trainer):
             #  - Loss calculation
             #  - Calculate number of correct predictions
             # ====== YOUR CODE: ======
-            pass
+
+            logits, self.hidden_state = self.model(x, self.hidden_state)
+            
+            if self.hidden_state is not None:
+                self.hidden_state = self.hidden_state.detach()
+    
+            logits_flat = logits.view(-1, self.model.out_dim)
+            y_flat = y.view(-1)
+            
+            loss = self.loss_fn(logits_flat, y_flat)
+            
+            _, predicted = torch.max(logits, dim=2)
+            num_correct = torch.sum(predicted == y)
+    
             # ========================
 
         return BatchResult(loss.item(), num_correct.item() / seq_len)
