@@ -104,8 +104,8 @@ def sliding_window_attention(q, k, v, window_size, padding_mask=None):
     values_contributes=  torch.einsum('...i,...ij->...ij', attention_local, v_local )
 
     values.index_add_(-2, q_idx, values_contributes)
-    
     #values =     attention@v
+    
     if padding_mask is not None:
         # Mask attention TO padding positions (columns) and FROM padding positions (rows)
         if len(attention_logits.shape) == 4:
