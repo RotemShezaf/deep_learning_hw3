@@ -9,52 +9,130 @@ import math
 def sliding_window_attention(q, k, v, window_size, padding_mask=None):
     '''
     Computes the simple sliding window attention from 'Longformer: The Long-Document Transformer'.
+    This implementation is meant for multihead attention on batched tensors. It should work for both single and multi-head attention.
+    :param q - the query vectors. #[Batch, SeqLen, Dims] or [Batch, num_heads, SeqLen, Dims]
+    :param k - the key vectors.  #[Batch, *, SeqLen, Dims] or [Batch, num_heads, SeqLen, Dims]
+    :param v - the value vectors.  #[Batch, *, SeqLen, Dims] or [Batch, num_heads, SeqLen, Dims]
+    :param window_size - size of sliding window. Must be an even number.
+    :param padding_mask - a mask that indicates padding with 0.  #[Batch, SeqLen]
+    :return values - the output values. #[Batch, SeqLen, Dims] or [Batch, num_heads, SeqLen, Dims]
+    :return attention - the attention weights. #[Batch, SeqLen, SeqLen] or [Batch, num_heads, SeqLen, SeqLen]
     '''
     assert window_size%2 == 0, "window size must be an even number"
     seq_len = q.shape[-2]
     embed_dim = q.shape[-1]
     batch_size = q.shape[0]
+    half_window = window_size// 2
 
     values, attention = None, None
-
+     
     # ====== YOUR CODE: ======
     d_k = k.size(-1)
-    half_window = window_size // 2
+
+    #compute row indexes for attention
+    attention_row_indeces =  torch.arange(seq_len, device=q.device, dtype=torch.long)  # shape (seq_len)
+
     
-    # Initialize attention logits with -inf (no attention by default)
-    attention_logits = torch.full((*q.shape[:-1], seq_len), float('-inf'), 
-                                   device=q.device, dtype=q.dtype)
+    # Step 2: Compute start and end of window for each index
+    start_idx = torch.clamp(attention_row_indeces  - half_window, min=0)          # shape (seq_len)
+    end_idx   = torch.clamp(attention_row_indeces + half_window + 1, max=seq_len)  # shape (seq_len)
+
+    #for the attention mast
+    attention_mask = (attention_row_indeces[None, :] >= start_idx[:, None]) &  (attention_row_indeces[None, :] < end_idx[:, None])
+
+    #get indexes for mutmull
+    indices = torch.nonzero(attention_mask, as_tuple=False) 
+    q_idx = indices[:, 0]
+    k_idx = indices[:, 1]
+
+
+
+    #create mutmull at the expected indexes 
+    attention_logits_local  = torch.einsum('...ik,...ik->...i', q[...,q_idx,:], k[...,k_idx,:])
     
-    # Compute attention scores only within sliding window
-    for i in range(seq_len):
-        start = max(0, i - half_window)
-        end = min(seq_len, i + half_window)
-        for j in range(start, end):
-            # Dot product along Dims dimension
-            dot = (q[..., i, :] * k[..., j, :]).sum(dim=-1)  # shape (...), last dim reduced
-            attention_logits[..., i, j] = dot / math.sqrt(d_k)
+    attention_logits = torch.full(
+        (*q.shape[:-1], seq_len),
+        -9e15,
+        device=q.device,
+        dtype=q.dtype,
+    )
     
-    # Apply padding mask if provided
+    #fill the currect indexes in attention_logits
+    attention_logits[...,q_idx, k_idx] = attention_logits_local
+    attention_logits = attention_logits/ math.sqrt(d_k)
+
+    #queries_mask =  torch.full(q.shape,    1, device=q.device, dtype=q.dtype)3
+    #mask for keys and queries
+    #print("da")
     if padding_mask is not None:
-        # Expand mask: [Batch, SeqLen] -> [Batch, 1, 1, SeqLen] for multi-head
-        mask_expanded = padding_mask
-        if padding_mask.dim() == 2:
-            while mask_expanded.dim() < attention_logits.dim():
-                mask_expanded = mask_expanded.unsqueeze(-2)
-        attention_logits = attention_logits.masked_fill(mask_expanded == 0, float('-inf'))
+        # Mask attention TO padding positions (columns) and FROM padding positions (rows)
+        if len(attention_logits.shape) == 4:
+            # Multi-head: [Batch, Heads, SeqLen, SeqLen]
+            # Mask FROM padding (rows): [Batch, 1, 1, SeqLen]
+            keys_mask = padding_mask.unsqueeze(1).unsqueeze(2)
+             # Mask For padding (columns): [Batch,  1, SeqLen, 1]
+            #queries_mask  = padding_mask.unsqueeze(1).unsqueeze(-1)
+        else:
+            # Mask FROM padding (rows) keys: [Batch,1, SeqLen]
+            keys_mask = padding_mask.unsqueeze(1)
+            # Mask For padding (columns) quries: [Batch,   SeqLen, 1]
+            #queries_mask  = padding_mask.unsqueeze(-1)
+        
+        # Apply both masks
+        attention_logits = attention_logits.masked_fill(keys_mask == 0   , -9e15)
+        #attention_logits = attention_logits.masked_fill(queries_mask == 0 , -1e9)
+        #v = v.masked_fill( queries_mask == 0  , 0)
+    # Apply both masks
+    #attention_logits = attention_logits.masked_fill(mask_to == 0, -9e15)
+    #'''
+    attention =   nn.functional.softmax(attention_logits, dim=-1)
     
-    # Compute attention weights
-    attention = torch.softmax(attention_logits, dim=-1)
+    #mask for attention, v multipication
     
-    # Compute values
-    values = torch.zeros_like(v)
-    for i in range(seq_len):
-        start = max(0, i - half_window)
-        end = min(seq_len, i + half_window)
-        for j in range(start, end):
-            values[..., i, :] += attention[..., i, j].unsqueeze(-1) * v[..., j, :]
+    v_local = v[...,k_idx,:]
+    attention_local = attention[...,q_idx, k_idx]
+    #print ("atten local:" ,attention_local.shape)
+    #print ("v_local:" ,v_local.shape)
+    values = torch.full(
+        q.shape,
+        0,
+        device=q.device,
+        dtype=q.dtype,
+    )
     
+    # the non zero contributes to values from attention
+    values_contributes=  torch.einsum('...i,...ij->...ij', attention_local, v_local )
+
+    values.index_add_(-2, q_idx, values_contributes)
+    
+    #values =     attention@v
+    if padding_mask is not None:
+        # Mask attention TO padding positions (columns) and FROM padding positions (rows)
+        if len(attention_logits.shape) == 4:
+            # Multi-head: [Batch, Heads, SeqLen, SeqLen]
+            # Mask FROM padding (rows): [Batch, 1, 1, SeqLen]
+            #keys_mask = padding_mask.unsqueeze(1).unsqueeze(2)
+             # Mask For padding (columns): [Batch,  1, SeqLen, 1]
+            queries_mask  = padding_mask.unsqueeze(1).unsqueeze(-1)
+        else:
+            # Mask FROM padding (rows) keys: [Batch,1, SeqLen]
+            #keys_mask = padding_mask.unsqueeze(1)
+            # Mask For padding (columns) quries: [Batch,   SeqLen, 1]
+            queries_mask  = padding_mask.unsqueeze(-1)
+        values = values.masked_fill(queries_mask == 0, 0)
+    
+
+    #mask for quaries
+    
+    '''
+    
+    
+    
+    '''
+   
     return values, attention
+
+    
     # ======================
 
 class MultiHeadAttention(nn.Module):
@@ -172,7 +250,25 @@ class EncoderLayer(nn.Module):
         '''
 
         # ====== YOUR CODE: ======
-        pass
+        '''
+        multy_head_attention, _ = self.self_attn( x, padding_mask)
+        attn_drop = self.dropout(multy_head_attention)
+        residual_1 = attn_drop + x
+        norm1 = self.norm1(residual_1)
+        feed_forward = self.feed_forward(norm1)
+        ff_dropout = self.dropout(feed_forward)
+        residual_2 = ff_dropout + norm1
+        x = self.norm2(x)
+        '''
+        x_residual_1 = x + self.dropout(self.self_attn(x, padding_mask))
+        x_normalized_1 = self.norm1(x_residual_1)
+        ff = self.feed_forward(x_normalized_1)
+        x_residual_2 = x_normalized_1 + self.dropout(ff)
+        norm2_outputs = self.norm2(x_residual_2) # normalize
+        x= norm2_outputs
+        #x = self.norm2(x_residual_2)
+
+        
         # ========================
         
         return x
@@ -213,8 +309,19 @@ class Encoder(nn.Module):
         '''
         output = None
 
+     
         # ====== YOUR CODE: ======
-        pass
+        x = self.encoder_embedding(sentence)  # [Batch, SeqLen, Dims]
+        x = self.positional_encoding(x)      # add positional encoding
+        x = self.dropout(x)
+        for layer in self.encoder_layers:
+            
+            x = layer(x, padding_mask)  # pass through each encoder layer
+        #get only the first word, x in shape [Batch, max_seq_len, dims]
+        output  = self.classification_mlp(x[...,0,:])
+        
+        
+            
         # ========================
         
         

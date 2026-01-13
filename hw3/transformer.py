@@ -55,61 +55,80 @@ def sliding_window_attention(q, k, v, window_size, padding_mask=None):
         -9e15,
         device=q.device,
         dtype=q.dtype,
-    ).to(q.device)
+    )
     
     #fill the currect indexes in attention_logits
     attention_logits[...,q_idx, k_idx] = attention_logits_local
     attention_logits = attention_logits/ math.sqrt(d_k)
 
+    #queries_mask =  torch.full(q.shape,    1, device=q.device, dtype=q.dtype)3
+    #mask for keys and queries
+    #print("da")
     if padding_mask is not None:
         # Mask attention TO padding positions (columns) and FROM padding positions (rows)
         if len(attention_logits.shape) == 4:
             # Multi-head: [Batch, Heads, SeqLen, SeqLen]
-            # Mask TO padding (columns): [Batch, 1, 1, SeqLen]
-            mask_to = padding_mask.unsqueeze(1).unsqueeze(2).expand(batch_size, q.shape[1] , seq_len,seq_len)
-            print(mask_to)
-            # Mask FROM padding (rows): [Batch, 1, SeqLen, 1]
-            mask_from = padding_mask.unsqueeze(1).unsqueeze(3)
+            # Mask FROM padding (rows): [Batch, 1, 1, SeqLen]
+            keys_mask = padding_mask.unsqueeze(1).unsqueeze(2)
+             # Mask For padding (columns): [Batch,  1, SeqLen, 1]
+            #queries_mask  = padding_mask.unsqueeze(1).unsqueeze(-1)
         else:
-            # Single-head: [Batch, SeqLen, SeqLen]
-            # Mask TO padding (columns): [Batch, 1, SeqLen]
-            mask_to = padding_mask.unsqueeze(1)
-            # Mask FROM padding (rows): [Batch, SeqLen, 1]
-            mask_from = padding_mask.unsqueeze(2)
+            # Mask FROM padding (rows) keys: [Batch,1, SeqLen]
+            keys_mask = padding_mask.unsqueeze(1)
+            # Mask For padding (columns) quries: [Batch,   SeqLen, 1]
+            #queries_mask  = padding_mask.unsqueeze(-1)
         
         # Apply both masks
-        attention_logits = attention_logits.masked_fill(mask_to == 0, -9e15)
-        #attention_logits = attention_logits.masked_fill(mask_from == 0, -9e15)
-    
+        attention_logits = attention_logits.masked_fill(keys_mask == 0   , -9e15)
+        #attention_logits = attention_logits.masked_fill(queries_mask == 0 , -1e9)
+        #v = v.masked_fill( queries_mask == 0  , 0)
     # Apply both masks
     #attention_logits = attention_logits.masked_fill(mask_to == 0, -9e15)
-    #attention_logits = attention_logits.masked_fill(mask_from == 0, -9e15)
     #'''
-    attention_logits = attention_logits
     attention =   nn.functional.softmax(attention_logits, dim=-1)
     
     #mask for attention, v multipication
-    '''
+    
     v_local = v[...,k_idx,:]
     attention_local = attention[...,q_idx, k_idx]
-    print ("atten local:" ,attention_local.shape)
-    print ("v_local:" ,v_local.shape)
+    #print ("atten local:" ,attention_local.shape)
+    #print ("v_local:" ,v_local.shape)
     values = torch.full(
         q.shape,
         0,
         device=q.device,
         dtype=q.dtype,
-    ).to(q.device)
-
+    )
+    
     # the non zero contributes to values from attention
     values_contributes=  torch.einsum('...i,...ij->...ij', attention_local, v_local )
 
     values.index_add_(-2, q_idx, values_contributes)
-    '''
     
-    values = attention @ v
+    #values =     attention@v
+    if padding_mask is not None:
+        # Mask attention TO padding positions (columns) and FROM padding positions (rows)
+        if len(attention_logits.shape) == 4:
+            # Multi-head: [Batch, Heads, SeqLen, SeqLen]
+            # Mask FROM padding (rows): [Batch, 1, 1, SeqLen]
+            #keys_mask = padding_mask.unsqueeze(1).unsqueeze(2)
+             # Mask For padding (columns): [Batch,  1, SeqLen, 1]
+            queries_mask  = padding_mask.unsqueeze(1).unsqueeze(-1)
+        else:
+            # Mask FROM padding (rows) keys: [Batch,1, SeqLen]
+            #keys_mask = padding_mask.unsqueeze(1)
+            # Mask For padding (columns) quries: [Batch,   SeqLen, 1]
+            queries_mask  = padding_mask.unsqueeze(-1)
+        values = values.masked_fill(queries_mask == 0, 0)
     
 
+    #mask for quaries
+    
+    '''
+    
+    
+    
+    '''
    
     return values, attention
 
@@ -294,9 +313,14 @@ class Encoder(nn.Module):
         # ====== YOUR CODE: ======
         x = self.encoder_embedding(sentence)  # [Batch, SeqLen, Dims]
         x = self.positional_encoding(x)      # add positional encoding
+        x = self.dropout(x)
         for layer in self.encoder_layers:
-            x = layer(x, self.padding_mask)  # pass through each encoder layer
-        output = x
+            
+            x = layer(x, padding_mask)  # pass through each encoder layer
+        #get only the first word, x in shape [Batch, max_seq_len, dims]
+        output  = self.classification_mlp(x[...,0,:])
+        
+        
             
         # ========================
         
